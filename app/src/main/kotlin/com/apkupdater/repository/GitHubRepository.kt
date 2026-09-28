@@ -15,6 +15,7 @@ import com.apkupdater.data.ui.Link
 import com.apkupdater.data.ui.getApp
 import com.apkupdater.prefs.Prefs
 import com.apkupdater.service.GitHubService
+import com.apkupdater.util.cleanVersion
 import com.apkupdater.util.combine
 import com.apkupdater.util.filterVersionTag
 import io.github.g00fy2.versioncompare.Version
@@ -74,27 +75,39 @@ class GitHubRepository(
     }
 
     private fun selfCheck() = flow {
-        val releases = service.getReleases().filter { filterPreRelease(it) }
-        val versions = getVersions(releases[0].name)
+        val releases = service.getReleases("jaidenteli80", "apkupdater_revival").filter { filterPreRelease(it) }
+        if (releases.isNotEmpty()) {
+            val latestRelease = releases[0]
+            val versions = getVersions(latestRelease.name.ifEmpty { latestRelease.tag_name })
+            val apkAsset = findApkAssetArch(latestRelease.assets, null)
+            val cleanTagName = cleanVersion(latestRelease.tag_name)
 
-        if (versions.second > BuildConfig.VERSION_CODE.toLong()) {
-            emit(
-                listOf(
-                    AppUpdate(
-                        name = "APKUpdater",
-                        packageName = BuildConfig.APPLICATION_ID,
-                        version = versions.first,
-                        oldVersion = BuildConfig.VERSION_NAME,
-                        versionCode = versions.second,
-                        oldVersionCode = BuildConfig.VERSION_CODE.toLong(),
-                        source = GitHubSource,
-                        link = Link.Url(releases[0].assets[0].browser_download_url),
-                        whatsNew = releases[0].body,
+            val isNewer = try {
+                Version(cleanTagName) > Version(BuildConfig.VERSION_NAME) || (versions.second > BuildConfig.VERSION_CODE.toLong())
+            } catch (_: Exception) {
+                false
+            }
+
+            if (isNewer && apkAsset.browser_download_url.isNotEmpty()) {
+                emit(
+                    listOf(
+                        AppUpdate(
+                            name = "APKUpdater Revival",
+                            packageName = BuildConfig.APPLICATION_ID,
+                            version = cleanTagName,
+                            oldVersion = BuildConfig.VERSION_NAME,
+                            versionCode = if (versions.second > 0) versions.second else 200L,
+                            oldVersionCode = BuildConfig.VERSION_CODE.toLong(),
+                            source = GitHubSource,
+                            link = Link.Url(apkAsset.browser_download_url, apkAsset.size),
+                            whatsNew = latestRelease.body,
+                        )
                     )
                 )
-            )
+            } else {
+                emit(listOf())
+            }
         } else {
-            // We need to emit empty so it can be combined later
             emit(listOf())
         }
     }.catch {
@@ -127,7 +140,7 @@ class GitHubRepository(
                     AppUpdate(
                         name = repo,
                         packageName = packageName,
-                        version = releases[0].tag_name,
+                        version = cleanVersion(releases[0].tag_name),
                         oldVersion = app?.version ?: "?",
                         versionCode = 0L,
                         oldVersionCode = app?.versionCode ?: 0L,

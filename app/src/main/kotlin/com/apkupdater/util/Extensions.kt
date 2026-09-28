@@ -153,6 +153,11 @@ fun OkHttpClient.Builder.addUserAgentInterceptor(agent: String) = addNetworkInte
 	it.proceed(it.request().newBuilder().header("User-Agent", agent).build())
 }
 
+fun cleanVersion(version: String): String = version
+	.replace(Regex("[-_]?(build|b|ci|release)[-_]?\\d*", RegexOption.IGNORE_CASE), "")
+	.replace(Regex("^v", RegexOption.IGNORE_CASE), "")
+	.trim()
+
 fun filterVersionTag(version: String) = version
 	.replace(Regex("^\\D*"), "")
 	//.replace(Regex("\\D+\$"), "") // In case we want to remove non-numeric at end too

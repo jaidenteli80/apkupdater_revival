@@ -2,7 +2,6 @@ package com.apkupdater.viewmodel
 
 import androidx.lifecycle.viewModelScope
 import com.apkupdater.R
-import com.apkupdater.data.snack.TextSnack
 import com.apkupdater.data.ui.AppInstallStatus
 import com.apkupdater.data.ui.AppUpdate
 import com.apkupdater.data.ui.UpdateStage
@@ -23,6 +22,7 @@ import com.apkupdater.util.Stringer
 import com.apkupdater.util.UpdatesNotification
 import com.apkupdater.util.launchWithMutex
 import kotlinx.coroutines.Dispatchers
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -125,19 +125,19 @@ class UpdatesViewModel(
 		while (currentProgress < 0.2f) {
 			currentProgress += 0.05f
 			state.value = UpdatesUiState.Loading(UpdateStage.CONNECTING, currentProgress)
-			delay(150)
+			delay(150.milliseconds)
 		}
 
 		while (currentProgress < 0.6f) {
 			currentProgress += 0.05f
 			state.value = UpdatesUiState.Loading(UpdateStage.FETCHING, currentProgress)
-			delay(200)
+			delay(200.milliseconds)
 		}
 
 		while (currentProgress < 0.9f) {
 			currentProgress += 0.02f
 			state.value = UpdatesUiState.Loading(UpdateStage.CHECKING, currentProgress)
-			delay(250)
+			delay(250.milliseconds)
 		}
 	}
 
@@ -160,8 +160,7 @@ class UpdatesViewModel(
 				state.value = UpdatesUiState.Success(newStateUpdates)
 			}
 		} else {
-			snackBar.snackBar(viewModelScope, TextSnack(stringer.get(R.string.permission_install_required)))
-			installer.openInstallSettings()
+			_dialogState.value = InstallDialogState.PermissionRequired
 		}
 	}
 
@@ -202,8 +201,7 @@ class UpdatesViewModel(
 			}
 			downloadAndInstall(update.id, update.packageName, update.link)
 		} else {
-			snackBar.snackBar(viewModelScope, TextSnack(stringer.get(R.string.permission_install_required)))
-			installer.openInstallSettings()
+			_dialogState.value = InstallDialogState.PermissionRequired
 		}
 	}
 
@@ -216,13 +214,11 @@ class UpdatesViewModel(
 			}
 		}
 
-		if (log.snack) {
-			state.value.updates().find { log.id == it.id }?.let { app ->
-				val message = if (log.success) R.string.install_success else R.string.install_failure
-				val text = if (log.success) stringer.get(message, app.name)
-				else log.errorMessage ?: stringer.get(message, app.name)
-				snackBar.snackBar(viewModelScope, TextSnack(text))
-			}
+		if (!log.success && !log.errorMessage.isNullOrEmpty()) {
+			_dialogState.value = InstallDialogState.GenericError(
+				"Installation Notice",
+				cleanErrorMessage(log.errorMessage)
+			)
 		}
 	}
 

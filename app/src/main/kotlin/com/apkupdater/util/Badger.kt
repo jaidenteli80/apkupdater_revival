@@ -8,7 +8,6 @@ class Badger {
 
     private val badges = MutableStateFlow(mapOf(
         Screen.Apps.route to "",
-        Screen.Search.route to "",
         Screen.Updates.route to "",
         Screen.Settings.route to ""
     ))

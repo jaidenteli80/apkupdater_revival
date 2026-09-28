@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -29,23 +30,30 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.platform.UriHandler
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.apkupdater.R
 import com.apkupdater.data.ui.AppUpdate
@@ -67,8 +75,17 @@ import org.koin.compose.koinInject
 
 @Composable
 fun UpdatesScreen(viewModel: UpdatesViewModel) {
-	LaunchedEffect(Unit) {
-		viewModel.refresh(load = false)
+	val lifecycleOwner = LocalLifecycleOwner.current
+	DisposableEffect(lifecycleOwner) {
+		val observer = LifecycleEventObserver { _, event ->
+			if (event == Lifecycle.Event.ON_RESUME) {
+				viewModel.checkPermissionOnResume()
+			}
+		}
+		lifecycleOwner.lifecycle.addObserver(observer)
+		onDispose {
+			lifecycleOwner.lifecycle.removeObserver(observer)
+		}
 	}
 
 	val dialogState by viewModel.dialogState.collectAsStateWithLifecycle()
@@ -89,7 +106,7 @@ fun UpdatesScreen(viewModel: UpdatesViewModel) {
 			AlertDialog(
 				onDismissRequest = { viewModel.dismissDialog() },
 				title = { Text("Permission Required") },
-				text = { Text("APKUpdater needs permission to install unknown apps. Press Continue to open Android System Settings, enable 'Allow from this source' for APKUpdater, then return to complete installation.") },
+				text = { Text("APKUpdater needs permission to install unknown apps. Press Continue to open Android System Settings, enable 'Allow from this source' (on some devices, select 'Always allow'), then return to complete installation.") },
 				confirmButton = {
 					Button(onClick = { viewModel.openPermissionSettings() }) {
 						Text("Continue to Settings")
@@ -98,6 +115,51 @@ fun UpdatesScreen(viewModel: UpdatesViewModel) {
 				dismissButton = {
 					Button(onClick = { viewModel.dismissDialog() }) {
 						Text("Cancel")
+					}
+				}
+			)
+		}
+		is InstallDialogState.PermissionDenied -> {
+			AlertDialog(
+				onDismissRequest = { viewModel.dismissDialog() },
+				title = { Text("Permission Denied") },
+				text = { Text("Permission to install unknown apps was denied. You must grant this permission in settings to install updates.") },
+				confirmButton = {
+					Button(onClick = { viewModel.dismissDialog() }) {
+						Text("OK")
+					}
+				}
+			)
+		}
+		is InstallDialogState.SelfUpdateRequired -> {
+			AlertDialog(
+				onDismissRequest = { viewModel.dismissDialog() },
+				title = { Text("APKUpdater Update Required") },
+				text = { Text("A new update for APKUpdater Revival (${dialog.selfUpdate.version}) is available. Please update APKUpdater Revival first before updating other applications.") },
+				confirmButton = {
+					Button(onClick = {
+						val selfUpdate = dialog.selfUpdate
+						viewModel.dismissDialog()
+						viewModel.install(selfUpdate, viewModel.state().value.updates())
+					}) {
+						Text("Update APKUpdater")
+					}
+				},
+				dismissButton = {
+					Button(onClick = { viewModel.dismissDialog() }) {
+						Text("Cancel")
+					}
+				}
+			)
+		}
+		is InstallDialogState.GenericError -> {
+			AlertDialog(
+				onDismissRequest = { viewModel.dismissDialog() },
+				title = { Text(dialog.title) },
+				text = { Text(dialog.message) },
+				confirmButton = {
+					Button(onClick = { viewModel.dismissDialog() }) {
+						Text("OK")
 					}
 				}
 			)
@@ -114,13 +176,36 @@ fun UpdatesScreen(viewModel: UpdatesViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun UpdatesTopBar(viewModel: UpdatesViewModel) = TopAppBar(
+fun UpdatesTopBar(
+	viewModel: UpdatesViewModel,
+	isSearching: Boolean,
+	searchQuery: String,
+	onSearchQueryChanged: (String) -> Unit,
+	onSearchToggle: () -> Unit
+) = TopAppBar(
 	title = {
-		Text(stringResource(R.string.tab_updates))
+		if (isSearching) {
+			OutlinedTextField(
+				value = searchQuery,
+				onValueChange = onSearchQueryChanged,
+				placeholder = { Text("Search updates...") },
+				singleLine = true,
+				modifier = Modifier.fillMaxWidth().padding(end = 8.dp),
+				colors = OutlinedTextFieldDefaults.colors(
+					focusedBorderColor = Color.Transparent,
+					unfocusedBorderColor = Color.Transparent
+				)
+			)
+		} else {
+			Text(stringResource(R.string.tab_updates))
+		}
 	},
 	colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.statusBarColor()),
 	windowInsets = WindowInsets(0),
 	actions = {
+		IconButton(onClick = onSearchToggle) {
+			Icon(if (isSearching) Icons.Default.Close else Icons.Default.Search, contentDescription = "Search")
+		}
 		Button(
 			onClick = { viewModel.installAll() },
 			modifier = Modifier.padding(end = 4.dp)
@@ -140,7 +225,7 @@ fun UpdatesTopBar(viewModel: UpdatesViewModel) = TopAppBar(
 
 @Composable
 fun UpdatesScreenLoading(viewModel: UpdatesViewModel, stage: UpdateStage, progress: Float) = Column {
-	UpdatesTopBar(viewModel)
+	UpdatesTopBar(viewModel, false, "", {}, {})
 	Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
 		Column(
 			horizontalAlignment = Alignment.CenterHorizontally,
@@ -166,7 +251,7 @@ fun UpdatesScreenLoading(viewModel: UpdatesViewModel, stage: UpdateStage, progre
 
 @Composable
 fun UpdatesScreenError(viewModel: UpdatesViewModel, message: String?) = Column {
-	UpdatesTopBar(viewModel)
+	UpdatesTopBar(viewModel, false, "", {}, {})
 	Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
 		Column(horizontalAlignment = Alignment.CenterHorizontally) {
 			Text(text = message ?: stringResource(R.string.something_went_wrong))
@@ -183,12 +268,19 @@ fun UpdatesScreenSuccess(
 	viewModel: UpdatesViewModel,
 	updates: List<AppUpdate>
 ) = Column {
-	val handler = LocalUriHandler.current
 	val prefs = koinInject<Prefs>()
 	val tv = prefs.androidTvUi.get()
 	val isRoot = prefs.rootInstall.get()
 
-	UpdatesTopBar(viewModel)
+	var isSearching by remember { mutableStateOf(false) }
+	var searchQuery by remember { mutableStateOf("") }
+
+	val filteredUpdates = remember(updates, searchQuery) {
+		if (searchQuery.isEmpty()) updates
+		else updates.filter { it.name.contains(searchQuery, true) || it.packageName.contains(searchQuery, true) }
+	}
+
+	UpdatesTopBar(viewModel, isSearching, searchQuery, { searchQuery = it }, { isSearching = !isSearching; if (!isSearching) searchQuery = "" })
 
     val installingApps = updates.filter { (it.isInstalling || it.error != null) }
     AnimatedVisibility(
@@ -209,6 +301,12 @@ fun UpdatesScreenSuccess(
                     text = "Please stay in the app during updates to manually approve each package installation prompt.",
                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                     color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                Text(
+                    text = "If Google Play Protect prompts you: tap 'More details' → 'Install anyway'.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
@@ -255,14 +353,24 @@ fun UpdatesScreenSuccess(
                         val progressValue = if (app.total > 0) app.progress.toFloat() / app.total.toFloat() else 0f
                         val progressPercent = (progressValue * 100).toInt()
                         
-                        LinearProgressIndicator(
-                            progress = { progressValue },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(12.dp)
-                                .clip(RoundedCornerShape(6.dp)),
-                            strokeCap = StrokeCap.Round
-                        )
+                        if (app.total <= 0 || app.progress >= app.total || app.status.contains("Installing", true) || app.status.contains("Confirming", true)) {
+                            LinearProgressIndicator(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(12.dp)
+                                    .clip(RoundedCornerShape(6.dp)),
+                                strokeCap = StrokeCap.Round
+                            )
+                        } else {
+                            LinearProgressIndicator(
+                                progress = { progressValue },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(12.dp)
+                                    .clip(RoundedCornerShape(6.dp)),
+                                strokeCap = StrokeCap.Round
+                            )
+                        }
                         
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
@@ -289,22 +397,21 @@ fun UpdatesScreenSuccess(
     }
 
 	when {
-		updates.isEmpty() -> EmptyGrid(stringResource(R.string.no_updates_found))
-		tv -> TvGrid(viewModel, updates, handler)
-		!tv -> Grid(viewModel, updates, handler)
+		filteredUpdates.isEmpty() -> EmptyGrid(stringResource(R.string.no_updates_found))
+		tv -> TvGrid(viewModel, filteredUpdates)
+		!tv -> Grid(viewModel, filteredUpdates)
 	}
 }
 
 @Composable
 fun TvGrid(
 	viewModel: UpdatesViewModel,
-	updates: List<AppUpdate>,
-	handler: UriHandler
+	updates: List<AppUpdate>
 ) = TvInstalledGrid {
 	items(updates) { update ->
 		TvUpdateItem(
 			update,
-			{ viewModel.install(update, handler) },
+			{ viewModel.install(update, updates) },
 			{ viewModel.ignoreVersion(update.id) }
 		)
 	}
@@ -313,12 +420,11 @@ fun TvGrid(
 @Composable
 fun Grid(
 	viewModel: UpdatesViewModel,
-	updates: List<AppUpdate>,
-	handler: UriHandler
+	updates: List<AppUpdate>
 ) = InstalledGrid {
 	items(updates) { update ->
 		UpdateItem(update) {
-			viewModel.install(update, handler)
+			viewModel.install(update, updates)
 		}
 	}
 }

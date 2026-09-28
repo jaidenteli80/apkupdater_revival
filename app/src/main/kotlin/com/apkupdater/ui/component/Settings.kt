@@ -119,20 +119,30 @@ fun SwitchSetting(
     onCheckedChange: (Boolean) -> Unit,
     text: String,
     @DrawableRes icon: Int = R.drawable.ic_system
-) = Box (Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 16.dp).clickable { onCheckedChange(!checked) }) {
-    Row(Modifier.align(CenterStart)) {
-        Icon(
-            painterResource(id = icon),
-            text,
-            Modifier.align(CenterVertically).padding(end = 16.dp).size(24.dp)
+) {
+    var state by remember(checked) { mutableStateOf(checked) }
+    Box (Modifier.fillMaxWidth().height(60.dp).padding(horizontal = 16.dp).clickable {
+        val newState = !state
+        state = newState
+        onCheckedChange(newState)
+    }) {
+        Row(Modifier.align(CenterStart)) {
+            Icon(
+                painterResource(id = icon),
+                text,
+                Modifier.align(CenterVertically).padding(end = 16.dp).size(24.dp)
+            )
+            Text(text, Modifier.align(CenterVertically))
+        }
+        Switch(
+            checked = state,
+            onCheckedChange = {
+                state = it
+                onCheckedChange(it)
+            },
+            modifier = Modifier.align(CenterEnd)
         )
-        Text(text, Modifier.align(CenterVertically))
     }
-    Switch(
-        checked = checked,
-        onCheckedChange = onCheckedChange,
-        modifier = Modifier.align(CenterEnd)
-    )
 }
 
 @Suppress("unused")

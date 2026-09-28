@@ -1,9 +1,11 @@
 package com.apkupdater.viewmodel
 
+import android.os.Build
 import androidx.activity.compose.ManagedActivityResultLauncher
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.WorkManager
+import com.apkupdater.BuildConfig
 import com.apkupdater.data.ui.SettingsUiState
 import com.apkupdater.prefs.Prefs
 import com.apkupdater.repository.AppsRepository
@@ -152,9 +154,18 @@ class SettingsViewModel(
 
 	fun copyAppLogs() = viewModelScope.launch(Dispatchers.IO) {
 		_actionState.value = ActionState.Loading("Copying Logs...")
-		val logs = installLog.logs().value.joinToString("\n")
-		clipboard.copy(logs, "App Logs")
-		_actionState.value = ActionState.Success("Logs Copied to Clipboard")
+		val rawLogs = installLog.logs().value.joinToString("\n")
+		val detailedLogs = buildString {
+			appendLine("=== APKUpdater Diagnostic Logs ===")
+			appendLine("App Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+			appendLine("Android SDK: ${Build.VERSION.SDK_INT} (Release: ${Build.VERSION.RELEASE})")
+			appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL} (Brand: ${Build.BRAND}, Product: ${Build.PRODUCT})")
+			appendLine("Root Enabled: ${prefs.rootInstall.get()}")
+			appendLine("----------------------------------------")
+			appendLine(rawLogs.ifEmpty { "No installation events recorded yet." })
+		}
+		clipboard.copy(detailedLogs, "Detailed App Logs")
+		_actionState.value = ActionState.Success("Detailed Logs Copied to Clipboard")
 	}
 
 }

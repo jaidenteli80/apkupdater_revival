@@ -89,8 +89,7 @@ class SearchViewModel(
             }
             downloadAndInstall(update.id, update.packageName, update.link)
         } else {
-            snackBar.snackBar(viewModelScope, TextSnack(stringer.get(R.string.permission_install_required)))
-            installer.openInstallSettings()
+            _dialogState.value = InstallDialogState.PermissionRequired
         }
     }
 

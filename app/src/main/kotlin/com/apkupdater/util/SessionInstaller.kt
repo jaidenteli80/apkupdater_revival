@@ -4,10 +4,8 @@ import android.annotation.SuppressLint
 import android.app.PendingIntent
 import android.app.PendingIntent.FLAG_MUTABLE
 import android.app.PendingIntent.FLAG_UPDATE_CURRENT
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageInstaller
 import android.os.Build
 import android.provider.Settings
@@ -18,14 +16,11 @@ import com.apkupdater.data.ui.AppInstallProgress
 import com.apkupdater.prefs.Prefs
 import com.topjohnwu.superuser.Shell
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.InputStream
 import java.util.zip.ZipFile
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
 
-@OptIn(ExperimentalAtomicApi::class)
 class SessionInstaller(
     private val context: Context,
     private val installLog: InstallLog,
@@ -196,32 +191,12 @@ class SessionInstaller(
             installLog.log("Root: Installing $packageName (${files.size} files)")
 
             val res = if (files.size == 1) {
-                Shell.cmd("pm install $flags$bypassFlag '${tmpFiles[0]}'").exec()
-            } else {
-                // Try pm install-multiple first
-                var r = Shell.cmd("pm install-multiple $flags$bypassFlag ${tmpFiles.joinToString(" ") { "'$it'" }}").exec()
-                if (!r.isSuccess && (r.out + r.err).any { it.contains("Unknown command", ignoreCase = true) }) {
-                    // Fallback to session-based manual CLI install
-                    val createRes = Shell.cmd("pm install-create $flags$bypassFlag").exec()
-                    val sessionId = createRes.out.firstOrNull { it.contains("Success: created install session [") }
-                        ?.substringAfter("[")?.substringBefore("]")
-
-                    if (sessionId != null) {
-                        var allWritesOk = true
-                        tmpFiles.forEachIndexed { index, path ->
-                            if (!Shell.cmd("pm install-write $sessionId split$index '$path'").exec().isSuccess) {
-                                allWritesOk = false
-                            }
-                        }
-                        r = if (allWritesOk) {
-                            Shell.cmd("pm install-commit $sessionId").exec()
-                        } else {
-                            Shell.cmd("pm install-abandon $sessionId").exec()
-                            createRes // Return original error context
-                        }
-                    }
+                val r = Shell.cmd("pm install $flags$bypassFlag '${tmpFiles[0]}'").exec()
+                if (r.isSuccess) r else {
+                    runSessionRootInstall(tmpFiles, bypassFlag)
                 }
-                r
+            } else {
+                runSessionRootInstall(tmpFiles, bypassFlag)
             }
 
             if (!res.isSuccess) {
@@ -229,12 +204,14 @@ class SessionInstaller(
                 installLog.log("Root Error: $packageName - $lastError")
 
                 var friendlyError = lastError
-                if (lastError.contains("REJECTED_BY_BUILDTYPE") || lastError.contains("-3001")) {
-                    friendlyError = "Signature mismatch: Uninstall existing app first"
+                if (lastError.contains("REJECTED_BY_BUILDTYPE") || lastError.contains("UPDATE_INCOMPATIBLE") || lastError.contains("signatures do not match") || lastError.contains("-3001")) {
+                    friendlyError = "Signature Mismatch: Update signature does not match installed version. Uninstall the app first to update."
                 } else if (lastError.contains("INSTALL_FAILED_MISSING_SHARED_LIBRARY")) {
                     friendlyError = "Missing shared library (e.g. TrichromeLibrary)"
                 } else if (lastError.contains("is a persistent app")) {
                     friendlyError = "Persistent system apps cannot be updated this way"
+                } else if (lastError.contains("VERIFICATION_FAILURE") || lastError.contains("BLOCKED")) {
+                    friendlyError = "Blocked by Google Play Protect. Tap 'More details' -> 'Install anyway' in system popup."
                 }
 
                 installLog.emitStatus(AppInstallStatus(success = false, id = id, snack = true, errorMessage = "Root failed: $friendlyError"))
@@ -249,13 +226,39 @@ class SessionInstaller(
         }
     }
 
+    private fun runSessionRootInstall(tmpFiles: List<String>, bypassFlag: String): Shell.Result {
+        val flags = "-r -d -t"
+        val createRes = Shell.cmd("pm install-create $flags$bypassFlag").exec()
+        val sessionId = createRes.out.firstOrNull { it.contains("Success: created install session [") }
+            ?.substringAfter("[")?.substringBefore("]")
+
+        if (sessionId == null) {
+            return createRes
+        }
+
+        var allWritesOk = true
+        tmpFiles.forEachIndexed { index, path ->
+            val writeRes = Shell.cmd("pm install-write $sessionId split$index '$path'").exec()
+            if (!writeRes.isSuccess) {
+                allWritesOk = false
+            }
+        }
+
+        return if (allWritesOk) {
+            Shell.cmd("pm install-commit $sessionId").exec()
+        } else {
+            Shell.cmd("pm install-abandon $sessionId").exec()
+            createRes
+        }
+    }
+
     private fun getTempDir(): File {
         val base = context.externalCacheDir ?: context.cacheDir
         return File(base, "installer_temp").apply { mkdirs() }
     }
 
     @SuppressLint("RequestInstallPackagesPolicy")
-    private suspend fun installNew(
+    private fun installNew(
         id: Int,
         packageName: String,
         files: List<File>
@@ -271,108 +274,44 @@ class SessionInstaller(
         }
 
         params.setAppPackageName(packageName)
-        if (Build.VERSION.SDK_INT >= 31) {
-            params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED)
-        }
         if (Build.VERSION.SDK_INT >= 33) params.setPackageSource(PackageInstaller.PACKAGE_SOURCE_STORE)
 
         val totalSize = files.sumOf { it.length() }
         params.setSize(totalSize)
 
-        return suspendCancellableCoroutine { continuation ->
-            val receiver = object : BroadcastReceiver() {
-                @SuppressLint("UnsafeIntentLaunch")
-                override fun onReceive(context: Context, intent: Intent?) {
-                    val status = intent?.getIntExtra(PackageInstaller.EXTRA_STATUS, -1)
-                    val message = intent?.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
+        return try {
+            val sessionId = packageInstaller.createSession(params)
+            installLog.currentInstallId = id
+            packageInstaller.openSession(sessionId).use { session ->
+                var baseFound = false
+                files.forEachIndexed { index, file ->
+                    val info = context.packageManager.getPackageArchiveInfo(file.absolutePath, 0)
+                    val isBase = (info != null && (info.packageName == packageName || files.size == 1)) || file.name.contains("base", ignoreCase = true)
+                    val name = if (isBase && !baseFound) {
+                        baseFound = true
+                        "base.apk"
+                    } else {
+                        "split_$index.apk"
+                    }
 
-                    if (status == -1) return
-
-                    when (status) {
-                        PackageInstaller.STATUS_SUCCESS -> {
-                            installLog.log("Success: $packageName")
-                            installLog.emitStatus(AppInstallStatus(success = true, id = id, snack = true))
-                            try { context.unregisterReceiver(this) } catch (_: Exception) {}
-                            if (continuation.isActive) continuation.resume(true) {_, _, _ -> }
-                        }
-                        PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                            val confirmIntent = if (Build.VERSION.SDK_INT >= 33) {
-                                intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)
-                            } else {
-                                @Suppress("DEPRECATION")
-                                intent.getParcelableExtra(Intent.EXTRA_INTENT)
-                            }
-
-                            confirmIntent?.apply {
-                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            }
-
-                            if (confirmIntent != null) {
-                                context.startActivity(confirmIntent)
-                            } else {
-                                installLog.emitStatus(AppInstallStatus(success = false, id = id, snack = true, errorMessage = "User action required but intent missing"))
-                                try { context.unregisterReceiver(this) } catch (_: Exception) {}
-                                if (continuation.isActive) continuation.resume(false) {_, _, _ -> }
-                            }
-                        }
-                        else -> {
-                            installLog.log("Error $status: $packageName - $message")
-                            var friendlyError = message ?: "Failed ($status)"
-                            if (friendlyError.contains("REJECTED_BY_BUILDTYPE") || status == -3001) {
-                                friendlyError = "Signature mismatch: Uninstall existing app first"
-                            }
-                            installLog.emitStatus(AppInstallStatus(success = false, id = id, snack = true, errorMessage = friendlyError))
-                            try { packageInstaller.abandonSession(intent?.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1) ?: -1) } catch (_: Exception) {}
-                            try { context.unregisterReceiver(this) } catch (_: Exception) {}
-                            if (continuation.isActive) continuation.resume(false) {_, _, _ -> }
+                    file.inputStream().use { input ->
+                        session.openWrite(name, 0, file.length()).use { output ->
+                            input.copyTo(output)
                         }
                     }
                 }
-            }
-
-            val timestamp = System.currentTimeMillis()
-            val actionId = "$INSTALL_ACTION.$id.$timestamp"
-            val filter = IntentFilter(actionId)
-            if (Build.VERSION.SDK_INT >= 33) {
-                context.registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)
-            } else {
-                @Suppress("UnspecifiedRegisterReceiverFlag")
-                context.registerReceiver(receiver, filter)
-            }
-
-            try {
-                val sessionId = packageInstaller.createSession(params)
-                continuation.invokeOnCancellation {
-                    try { packageInstaller.abandonSession(sessionId) } catch (_: Exception) {}
+                val broadcastIntent = Intent(INSTALL_ACTION).apply {
+                    setPackage(context.packageName)
+                    putExtra(PackageInstaller.EXTRA_SESSION_ID, sessionId)
                 }
-                packageInstaller.openSession(sessionId).use { session ->
-                    var baseFound = false
-                    files.forEachIndexed { index, file ->
-                        val info = context.packageManager.getPackageArchiveInfo(file.absolutePath, 0)
-                        val isBase = (info != null && (info.packageName == packageName || files.size == 1)) || file.name.contains("base", ignoreCase = true)
-                        val name = if (isBase && !baseFound) {
-                            baseFound = true
-                            "base.apk"
-                        } else {
-                            "split_$index.apk"
-                        }
-
-                        file.inputStream().use { input ->
-                            session.openWrite(name, 0, file.length()).use { output ->
-                                input.copyTo(output)
-                            }
-                        }
-                    }
-                    val broadcastIntent = Intent(actionId).apply { setPackage(context.packageName) }
-                    val pending = PendingIntent.getBroadcast(context, sessionId, broadcastIntent, FLAG_UPDATE_CURRENT or FLAG_MUTABLE)
-                    session.commit(pending.intentSender)
-                }
-            } catch (e: Exception) {
-                Log.e("SessionInstaller", "Session failed", e)
-                try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
-                installLog.emitStatus(AppInstallStatus(success = false, id = id, snack = true, errorMessage = "Session failure: ${e.message}"))
-                if (continuation.isActive) continuation.resume(false) {_, _, _ -> }
+                val pending = PendingIntent.getBroadcast(context, sessionId, broadcastIntent, FLAG_UPDATE_CURRENT or FLAG_MUTABLE)
+                session.commit(pending.intentSender)
             }
+            true
+        } catch (e: Exception) {
+            Log.e("SessionInstaller", "Session failed", e)
+            installLog.emitStatus(AppInstallStatus(success = false, id = id, snack = true, errorMessage = "Session failure: ${e.message}"))
+            false
         }
     }
 }

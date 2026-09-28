@@ -10,6 +10,7 @@ import com.apkupdater.util.Badger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Job
+import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -55,19 +56,19 @@ class AppsViewModel(
 		while (currentProgress < 0.3f) {
 			currentProgress += 0.05f
 			state.value = buildLoadingState(currentProgress, "Scanning packages...")
-			delay(100)
+			delay(100.milliseconds)
 		}
 
 		while (currentProgress < 0.7f) {
 			currentProgress += 0.05f
 			state.value = buildLoadingState(currentProgress, "Filtering apps...")
-			delay(150)
+			delay(150.milliseconds)
 		}
 
 		while (currentProgress < 0.9f) {
 			currentProgress += 0.02f
 			state.value = buildLoadingState(currentProgress, "Finalizing list...")
-			delay(200)
+			delay(200.milliseconds)
 		}
 	}
 

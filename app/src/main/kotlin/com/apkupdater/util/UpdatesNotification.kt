@@ -94,8 +94,11 @@ class UpdatesNotification(private val context: Context) {
         val builder = getBaseBuilder()
             .setContentTitle(title)
             .setContentText(text)
-            .setProgress(100, progress, indeterminate)
+            .setSubText("APKUpdater Revival")
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+            .setProgress(100, progress.coerceIn(0, 100), indeterminate)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setAutoCancel(false)
 
         NotificationManagerCompat.from(context).notify(UPDATE_ID, builder.build())

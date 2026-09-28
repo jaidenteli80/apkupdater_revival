@@ -1,24 +1,19 @@
 package com.apkupdater.ui.component
 
-import androidx.annotation.DrawableRes
-import androidx.annotation.StringRes
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
@@ -27,12 +22,8 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -45,52 +36,6 @@ import com.apkupdater.data.ui.AppUpdate
 import com.apkupdater.data.ui.Source
 import com.apkupdater.util.clickableNoRipple
 
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ExcludeIcon(
-    exclude: Boolean,
-    @StringRes excludeString: Int,
-    @StringRes includeString: Int,
-    @DrawableRes excludeIcon: Int,
-    @DrawableRes includeIcon: Int,
-    @DrawableRes icon: Int = if (exclude) excludeIcon else includeIcon,
-    @StringRes string: Int = if (exclude) includeString else excludeString,
-    @StringRes contentDescription: Int = if (exclude) excludeString else includeString,
-) = TooltipBox(
-    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
-    state = rememberTooltipState(),
-    tooltip = { PlainTooltip { Text(stringResource(string)) } },
-) {
-    Icon(painterResource(icon), stringResource(contentDescription))
-}
-
-@Composable
-fun ExcludeSystemIcon(exclude: Boolean) = ExcludeIcon(
-    exclude = exclude,
-    excludeString = R.string.exclude_system_apps,
-    includeString = R.string.include_system_apps,
-    excludeIcon = R.drawable.ic_system_off,
-    includeIcon = R.drawable.ic_system
-)
-
-@Composable
-fun ExcludeAppStoreIcon(exclude: Boolean) = ExcludeIcon(
-    exclude = exclude,
-    excludeString = R.string.exclude_app_store,
-    includeString = R.string.include_app_store,
-    excludeIcon = R.drawable.ic_appstore_off,
-    includeIcon = R.drawable.ic_appstore
-)
-
-@Composable
-fun ExcludeDisabledIcon(exclude: Boolean) = ExcludeIcon(
-    exclude = exclude,
-    excludeString = R.string.exclude_disabled_apps,
-    includeString = R.string.include_disabled_apps,
-    excludeIcon = R.drawable.ic_disabled_off,
-    includeIcon = R.drawable.ic_disabled
-)
 
 @Composable
 fun SourceIcon(source: Source, modifier: Modifier = Modifier) = Icon(
@@ -139,56 +84,25 @@ fun BoxScope.InstallProgressIcon(
             }
         }
     } else if (app.isInstalling) {
-        val progress = if (app.total > 0) app.progress.toFloat() / app.total.toFloat() else 0f
-        val animatedProgress by animateFloatAsState(targetValue = progress)
-
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.1f),
-                            Color.Black.copy(alpha = 0.7f)
-                        )
-                    )
-                )
+                .align(Alignment.TopEnd)
+                .padding(6.dp)
         ) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = app.status,
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                LinearProgressIndicator(
-                    progress = { if (app.total > 0) animatedProgress else 0f },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(10.dp)
-                        .clip(RoundedCornerShape(5.dp)),
-                    trackColor = Color.White.copy(alpha = 0.3f),
+            val progress = if (app.total > 0) app.progress.toFloat() / app.total.toFloat() else 0f
+            if (app.total > 0 && app.progress < app.total) {
+                CircularProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.size(26.dp),
+                    strokeWidth = 3.dp,
                     color = MaterialTheme.colorScheme.primary
                 )
-                if (app.total > 0) {
-                    Text(
-                        text = "${(progress * 100).toInt()}%",
-                        color = Color.White,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = 10.sp,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                }
+            } else {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(26.dp),
+                    strokeWidth = 3.dp,
+                    color = MaterialTheme.colorScheme.primary
+                )
             }
         }
     } else {
@@ -203,7 +117,7 @@ fun BoxScope.InstallProgressIcon(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        painter = painterResource(R.drawable.ic_visible_off), // Using visible_off as a generic alert/error icon
+                        painter = painterResource(R.drawable.ic_visible_off),
                         contentDescription = "Error",
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(24.dp)
@@ -243,23 +157,6 @@ fun RefreshIcon(
 ) {
     Icon(
         painter = painterResource(id = R.drawable.ic_refresh),
-        contentDescription = text,
-        modifier = modifier
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun DownloadIcon(
-    text: String,
-    modifier: Modifier = Modifier
-) = TooltipBox(
-    positionProvider = TooltipDefaults.rememberTooltipPositionProvider(TooltipAnchorPosition.Above),
-    state = rememberTooltipState(),
-    tooltip = { PlainTooltip { Text(text) } }
-) {
-    Icon(
-        painter = painterResource(id = R.drawable.ic_download),
         contentDescription = text,
         modifier = modifier
     )

@@ -44,7 +44,6 @@ import com.apkupdater.util.SnackBar
 import com.apkupdater.util.Themer
 import com.apkupdater.viewmodel.AppsViewModel
 import com.apkupdater.viewmodel.MainViewModel
-import com.apkupdater.viewmodel.SearchViewModel
 import com.apkupdater.viewmodel.SettingsViewModel
 import com.apkupdater.viewmodel.UpdatesViewModel
 import kotlinx.coroutines.Dispatchers
@@ -62,8 +61,7 @@ import kotlin.coroutines.CoroutineContext
 fun MainScreen(mainViewModel: MainViewModel = koinViewModel()) {
 	// ViewModels
 	val appsViewModel: AppsViewModel = koinViewModel()
-	val updatesViewModel: UpdatesViewModel = koinViewModel()
-	val searchViewModel: SearchViewModel = koinViewModel()
+	val updatesViewModel: UpdatesViewModel = koinInject()
 	val settingsViewModel: SettingsViewModel = koinViewModel()
 
 	// Navigation
@@ -73,7 +71,7 @@ fun MainScreen(mainViewModel: MainViewModel = koinViewModel()) {
 		mainViewModel.refresh(appsViewModel, updatesViewModel)
 	}
 
-	// Used to launch the install intent and get dismissal result
+	// Used to launch the package installation intent and get dismissal result
 	val installLog = koinInject<InstallLog>()
 	val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
 		if (it.resultCode == RESULT_CANCELED) {
@@ -98,7 +96,7 @@ fun MainScreen(mainViewModel: MainViewModel = koinViewModel()) {
 			snackbarHost = { SnackbarHost(snackBarHostState) },
 			bottomBar = { BottomBar(mainViewModel, navController) }
 		) { padding ->
-            NavHost(navController, padding, mainViewModel, appsViewModel, updatesViewModel, searchViewModel, settingsViewModel)
+            AppNavHost(navController, padding, mainViewModel, appsViewModel, updatesViewModel, settingsViewModel)
 		}
 	}
 }
@@ -183,13 +181,12 @@ fun RowScope.BottomBarItem(
 )
 
 @Composable
-fun NavHost(
+fun AppNavHost(
 	navController: NavHostController,
 	padding: PaddingValues,
 	mainViewModel: MainViewModel,
 	appsViewModel: AppsViewModel,
 	updatesViewModel: UpdatesViewModel,
-	searchViewModel: SearchViewModel,
 	settingsViewModel: SettingsViewModel
 ) = NavHost(
 	navController = navController,
@@ -197,7 +194,6 @@ fun NavHost(
 	modifier = Modifier.padding(padding)
 ) {
 	composable(Screen.Apps.route) { AppsScreen(appsViewModel) }
-	composable(Screen.Search.route) { SearchScreen(searchViewModel) }
 	composable(Screen.Updates.route) { UpdatesScreen(updatesViewModel) }
 	composable(Screen.Settings.route) { SettingsScreen(settingsViewModel) }
 }

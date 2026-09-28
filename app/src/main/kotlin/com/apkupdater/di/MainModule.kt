@@ -35,7 +35,6 @@ import com.apkupdater.util.addUserAgentInterceptor
 import com.apkupdater.util.play.PlayHttpClient
 import com.apkupdater.viewmodel.AppsViewModel
 import com.apkupdater.viewmodel.MainViewModel
-import com.apkupdater.viewmodel.SearchViewModel
 import com.apkupdater.viewmodel.SettingsViewModel
 import com.apkupdater.viewmodel.UpdatesViewModel
 import com.google.gson.GsonBuilder
@@ -195,10 +194,8 @@ val mainModule = module {
 
 	viewModel { AppsViewModel(get(), get(), get()) }
 
-	viewModel { UpdatesViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+	single { UpdatesViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
 
 	viewModel { SettingsViewModel(get(), get(), WorkManager.getInstance(androidContext()), get(), get(), get(), get(), get()) }
-
-	viewModel { SearchViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
 
 }

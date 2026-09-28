@@ -21,11 +21,11 @@ android {
 
     val buildNumber = System.getenv("BUILD_NUMBER").orEmpty()
     defaultConfig {
-        applicationId = "com.apkupdater" + System.getenv("BUILD_TAG").orEmpty()
+        applicationId = "com.apkupdater.revived" + System.getenv("BUILD_TAG").orEmpty()
         minSdk = 24
         targetSdk = 36
-        versionCode = if (buildNumber.isEmpty()) 60 else buildNumber.toInt()
-        versionName = if (buildNumber.isEmpty()) "3.1.0-Revived" else "0.0.$buildNumber"
+        versionCode = if (buildNumber.isEmpty()) 200 else buildNumber.toInt()
+        versionName = if (buildNumber.isEmpty()) "2.0.0" else "0.0.$buildNumber"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }

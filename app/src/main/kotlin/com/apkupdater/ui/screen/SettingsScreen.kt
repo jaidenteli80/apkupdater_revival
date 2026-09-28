@@ -48,7 +48,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.AsyncImage
 import com.apkupdater.BuildConfig
 import com.apkupdater.R
 import com.apkupdater.data.ui.GitHubSource
@@ -68,7 +67,6 @@ import com.apkupdater.util.isAndroidTv
 import com.apkupdater.viewmodel.ActionState
 import com.apkupdater.viewmodel.SettingsViewModel
 import org.koin.compose.viewmodel.koinViewModel
-import java.util.Calendar
 
 
 @Composable
@@ -143,53 +141,15 @@ fun About() = LazyColumn(
 		Column(Modifier.padding(vertical = 16.dp)) {
 			LoadingImageApp(BuildConfig.APPLICATION_ID)
 			LargeTitle(stringResource(R.string.app_name), Modifier.align(CenterHorizontally))
-			MediumText("${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", Modifier.align(CenterHorizontally))
-			MediumText("Revived Version", Modifier.align(CenterHorizontally), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-			MediumText("Copyright © 2016-${Calendar.getInstance().get(Calendar.YEAR)} rumboalla", Modifier.align(CenterHorizontally))
+			MediumText("2.0.0-Revived", Modifier.align(CenterHorizontally), color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
 		}
 	}
 	item {
 		AboutItem(
-			"GitHub - APKUpdater",
-			stringResource(R.string.about_github),
-			"https://github.com/rumboalla/apkupdater",
+			"GitHub - APKUpdater Revival",
+			"Source code, releases, and bug reports for APKUpdater Revival.",
+			"https://github.com/jaidenteli80/apkupdater_revival",
 			{ SourceIcon(GitHubSource, Modifier.size(64.dp).align(CenterVertically)) }
-		)
-		AboutItem(
-			"Donate - Malaria Consortium",
-			stringResource(R.string.about_donate),
-			"https://www.malariaconsortium.org/support-us/donate.htm",
-			{
-				AsyncImage(
-					"https://www.malariaconsortium.org/website-2017/_images/logo-mc.png",
-					"Malaria Consortium",
-					Modifier.size(64.dp).align(CenterVertically)
-				)
-			}
-		)
-		AboutItem(
-			"Donate - New Incentives",
-			stringResource(R.string.about_donate),
-			"https://www.newincentives.org/donate",
-			{
-				AsyncImage(
-					"https://i.vimeocdn.com/portrait/81193504_60x60",
-					"New Incentives",
-					Modifier.size(64.dp).align(CenterVertically)
-				)
-			}
-		)
-		AboutItem(
-			"Donate - Sightsavers",
-			stringResource(R.string.about_donate),
-			"https://donate.sightsavers.org/smxpatron/global/donate.html",
-			{
-				AsyncImage(
-					"https://www.sightsavers.org/wp-content/uploads/2017/10/Sightsavers-Author-Placeholder.png",
-					"Sightsavers",
-					Modifier.size(64.dp).align(CenterVertically)
-				)
-			}
 		)
 	}
 }

@@ -24,7 +24,7 @@
     <string name="app_cd">App Icon</string>
     <string name="install_success">%1$s installed.</string>
     <string name="install_failure">%1$s failed to install.</string>
-    <string name="root_install_not_supported">Root install of this app is not supported.</string>
+    <string name="root_install_not_supported">Root installation of this app is not supported.</string>
     <string name="persistent_app_warning">This is a persistent system app and cannot be updated this way.</string>
 
     // Settings
@@ -45,7 +45,7 @@
     <string name="ignore_beta">Ignore Beta</string>
     <string name="ignore_preRelease">Ignore Pre-release</string>
     <string name="use_safe_stores">Use Safe Stores (Aptoide)</string>
-    <string name="root_install">Root Install</string>
+    <string name="root_install">Root Installation</string>
     <string name="source_apkmirror" translatable="false">ApkMirror</string>
     <string name="source_fdroid" translatable="false">F-Droid Main</string>
     <string name="source_izzy" translatable="false">F-Droid Izzy</string>
@@ -101,6 +101,6 @@
     <string name="no_updates_found">No updates currently found!!</string>
 
     // Permissions
-    <string name="permission_install_required">Install permission required. Please enable it in settings.</string>
+    <string name="permission_install_required">Installation permission required. Please enable it in settings.</string>
 
 </resources>
